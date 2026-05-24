@@ -91,17 +91,21 @@ div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child
 
 /* Active verdict: a hidden <span class="dm-verdict-X"> lives inside the
    title column of the SAME horizontal block as the buttons. Using
-   :has() to locate it ensures we colour buttons in only THIS block —
-   no sibling-container hopping. */
-div[data-testid="stHorizontalBlock"]:has(.dm-verdict-wrong)
+   :has() to locate it ensures we colour buttons in only THIS block.
+   IMPORTANT: :has() is transitive — outer blocks (page split, action
+   row) also satisfy :has(.dm-verdict-X). We MUST additionally require
+   this block to have exactly 4 direct column children (the annotation
+   row signature) so we don't accidentally style the chat-vs-fields
+   split or the action-buttons row. */
+div[data-testid="stHorizontalBlock"]:has(.dm-verdict-wrong):has(> div[data-testid="stColumn"]:nth-child(4)):not(:has(> div[data-testid="stColumn"]:nth-child(5)))
   > div[data-testid="stColumn"]:nth-child(2) button {
     background: #b03a3a !important; color: #ffffff !important; border-color: #b03a3a !important;
 }
-div[data-testid="stHorizontalBlock"]:has(.dm-verdict-partial)
+div[data-testid="stHorizontalBlock"]:has(.dm-verdict-partial):has(> div[data-testid="stColumn"]:nth-child(4)):not(:has(> div[data-testid="stColumn"]:nth-child(5)))
   > div[data-testid="stColumn"]:nth-child(3) button {
     background: #c89c1f !important; color: #ffffff !important; border-color: #c89c1f !important;
 }
-div[data-testid="stHorizontalBlock"]:has(.dm-verdict-correct)
+div[data-testid="stHorizontalBlock"]:has(.dm-verdict-correct):has(> div[data-testid="stColumn"]:nth-child(4)):not(:has(> div[data-testid="stColumn"]:nth-child(5)))
   > div[data-testid="stColumn"]:nth-child(4) button {
     background: #3a8a3a !important; color: #ffffff !important; border-color: #3a8a3a !important;
 }
