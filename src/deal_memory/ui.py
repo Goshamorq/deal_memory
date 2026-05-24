@@ -357,50 +357,41 @@ def _render_field(
 # ---- Tab 1: Диалоги ----
 
 
-def _on_pool_change() -> None:
-    st.session_state.current_pool = st.session_state.pool_widget
-
-
-def _on_dialog_change() -> None:
-    st.session_state.current_dialog_id = st.session_state.dialog_widget
-
-
 def tab_dialogs() -> None:
     pools = _list_pools()
     if not pools:
         st.warning("Нет пулов в data/pools/. Добавь хотя бы один JSONL-файл.")
         return
 
-    # Authoritative pool selection — our own state, not the widget's.
-    saved_pool = st.session_state.get("current_pool")
-    if saved_pool not in pools:
-        saved_pool = "manual-v1" if "manual-v1" in pools else pools[0]
-        st.session_state.current_pool = saved_pool
+    # --- Pool state: canonical Streamlit pattern ---
+    # 1) seed widget state BEFORE the widget is rendered
+    # 2) only `key=` on the widget, never `index=` or `value=`
+    # 3) self-bind to defeat session_state GC when tab/dialog re-mounts
+    default_pool = "manual-v1" if "manual-v1" in pools else pools[0]
+    st.session_state.setdefault("pool_widget", default_pool)
+    if st.session_state.pool_widget not in pools:
+        st.session_state.pool_widget = default_pool
+    st.session_state.pool_widget = st.session_state.pool_widget
 
     col_pool, col_dialog = st.columns(2)
     with col_pool:
-        st.selectbox(
-            "Пул диалогов",
-            pools,
-            index=pools.index(saved_pool),
-            key="pool_widget",
-            on_change=_on_pool_change,
-        )
+        st.selectbox("Пул диалогов", pools, key="pool_widget")
 
-    pool = st.session_state.current_pool
+    pool = st.session_state.pool_widget
     dialogs = _load_dialogs(pool)
     predictions = _load_predictions(pool)
     annotations = _load_annotations(pool)
-
     dialog_options = [d.id for d in dialogs]
+    if not dialog_options:
+        return
 
-    # Authoritative dialog selection. Reset when current_dialog_id is from a
-    # different pool (won't be in this pool's options).
-    saved_did = st.session_state.get("current_dialog_id")
-    if saved_did not in dialog_options:
-        saved_did = dialog_options[0] if dialog_options else None
-        if saved_did is not None:
-            st.session_state.current_dialog_id = saved_did
+    # --- Dialog state: same canonical pattern ---
+    if (
+        "dialog_widget" not in st.session_state
+        or st.session_state.dialog_widget not in dialog_options
+    ):
+        st.session_state.dialog_widget = dialog_options[0]
+    st.session_state.dialog_widget = st.session_state.dialog_widget
 
     with col_dialog:
         def fmt(did: str) -> str:
@@ -409,19 +400,9 @@ def tab_dialogs() -> None:
             scn = f"  ({d.scenario})" if d.scenario else ""
             return f"{mark}  {did}{scn}"
 
-        if dialog_options:
-            st.selectbox(
-                "Диалог",
-                dialog_options,
-                index=dialog_options.index(saved_did),
-                format_func=fmt,
-                key="dialog_widget",
-                on_change=_on_dialog_change,
-            )
+        st.selectbox("Диалог", dialog_options, format_func=fmt, key="dialog_widget")
 
-    dialog_id = st.session_state.get("current_dialog_id")
-    if dialog_id is None:
-        return
+    dialog_id = st.session_state.dialog_widget
     dialog = next(d for d in dialogs if d.id == dialog_id)
 
     left, right = st.columns([3, 2])
@@ -455,14 +436,12 @@ def tab_dialogs() -> None:
                 use_container_width=True,
                 key=f"act-clear-{dialog_id}",
             ):
-                # Re-read both pool and dialog_id from session_state at the
-                # moment of the click — never from closure. This makes the
-                # operation immune to any state drift between the top-of-
-                # function capture and the click handler execution (e.g. a
-                # stale JS bundle dispatching a delayed on_change for the
-                # dialog selectbox).
-                pool_now = st.session_state.get("current_pool")
-                dialog_id_now = st.session_state.get("current_dialog_id")
+                # Re-read both pool and dialog_id from widget state at the
+                # moment of the click — never from closure. The widget keys
+                # are now the single source of truth (canonical Streamlit
+                # pattern); no parallel mirror state to drift away from.
+                pool_now = st.session_state.get("pool_widget")
+                dialog_id_now = st.session_state.get("dialog_widget")
                 if not pool_now or not dialog_id_now:
                     st.error("Не удалось определить пул/диалог для очистки.")
                 else:
@@ -497,14 +476,13 @@ def tab_metrics() -> None:
     if not pools:
         st.warning("Нет пулов.")
         return
-    saved_pool = st.session_state.get("metrics_pool")
-    if saved_pool in pools:
-        metrics_idx = pools.index(saved_pool)
-    elif "manual-v1" in pools:
-        metrics_idx = pools.index("manual-v1")
-    else:
-        metrics_idx = 0
-    pool = st.selectbox("Пул", pools, index=metrics_idx, key="metrics_pool")
+    default_pool = "manual-v1" if "manual-v1" in pools else pools[0]
+    st.session_state.setdefault("metrics_pool", default_pool)
+    if st.session_state.metrics_pool not in pools:
+        st.session_state.metrics_pool = default_pool
+    st.session_state.metrics_pool = st.session_state.metrics_pool
+    st.selectbox("Пул", pools, key="metrics_pool")
+    pool = st.session_state.metrics_pool
     annotations = _load_annotations(pool)
     if not annotations:
         st.info(
