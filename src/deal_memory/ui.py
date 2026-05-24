@@ -47,6 +47,67 @@ LIST_FIELDS = {"objections", "promises"}
 VERDICT_LABEL = {"correct": "✓", "partial": "±", "wrong": "✗", None: "·"}
 VERDICT_COLOR = {"correct": "#3a8a3a", "partial": "#c89c1f", "wrong": "#b03a3a"}
 
+# Annotation row is laid out as a 4-column block: [title, ✗, ±, ✓].
+# CSS below colors buttons by their column position (2/3/4) within any
+# 4-col block whose 4th column contains a button — that signature is
+# unique to our annotation rows.
+ANNOTATION_CSS = """
+<style>
+/* Annotation rows: 4 columns where every non-first column holds one button */
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
+:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
+> div[data-testid="stColumn"]:nth-child(2) button,
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
+:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
+> div[data-testid="stColumn"]:nth-child(3) button,
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
+:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
+> div[data-testid="stColumn"]:nth-child(4) button {
+    padding: 0.15rem 0.4rem !important;
+    min-height: 0 !important;
+    line-height: 1 !important;
+    font-size: 14px !important;
+    border-width: 1px !important;
+}
+
+/* col 2 = ✗ wrong = red */
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
+:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
+> div[data-testid="stColumn"]:nth-child(2) button[kind="secondary"] {
+    background: #fce4e4 !important; color: #b03a3a !important; border-color: #b03a3a !important;
+}
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
+:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
+> div[data-testid="stColumn"]:nth-child(2) button[kind="primary"] {
+    background: #b03a3a !important; color: #ffffff !important; border-color: #b03a3a !important;
+}
+
+/* col 3 = ± partial = yellow */
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
+:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
+> div[data-testid="stColumn"]:nth-child(3) button[kind="secondary"] {
+    background: #fcefd0 !important; color: #8a6a14 !important; border-color: #c89c1f !important;
+}
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
+:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
+> div[data-testid="stColumn"]:nth-child(3) button[kind="primary"] {
+    background: #c89c1f !important; color: #ffffff !important; border-color: #c89c1f !important;
+}
+
+/* col 4 = ✓ correct = green */
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
+:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
+> div[data-testid="stColumn"]:nth-child(4) button[kind="secondary"] {
+    background: #dff0d8 !important; color: #2e6b2e !important; border-color: #3a8a3a !important;
+}
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
+:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
+> div[data-testid="stColumn"]:nth-child(4) button[kind="primary"] {
+    background: #3a8a3a !important; color: #ffffff !important; border-color: #3a8a3a !important;
+}
+</style>
+"""
+
 
 # ---- Speaker-aware transcript renderer ----
 
@@ -149,20 +210,14 @@ def _render_field(
     current_verdict: str | None,
 ) -> None:
     label = FIELD_LABELS[field]
-    color = VERDICT_COLOR.get(current_verdict, "#888888") if current_verdict else "#888888"
 
     with st.container(border=True):
-        st.markdown(f"**{label}**")
-        if prediction is None:
-            st.markdown("_(не обработано)_")
-        elif field in LIST_FIELDS:
-            st.markdown(_list_text(getattr(prediction, field)))
-        else:
-            fe: FieldEvidence = getattr(prediction, field)
-            st.markdown(_field_text(fe.value, fe.quote))
-
-        cols = st.columns([1, 1, 1, 4])
-        with cols[0]:
+        # Header row: 4 cols — [title, ✗, ±, ✓]. The annotation buttons are
+        # styled by ANNOTATION_CSS (red/yellow/green) based on column index.
+        title_col, c_wrong, c_partial, c_correct = st.columns([6, 1, 1, 1])
+        with title_col:
+            st.markdown(f"**{label}**")
+        with c_wrong:
             if st.button(
                 "✗",
                 key=f"v-wrong-{dialog_id}-{field}",
@@ -173,7 +228,7 @@ def _render_field(
             ):
                 ann_mod.upsert(pool, dialog_id, field, "wrong", base=ANN_DIR)
                 st.rerun()
-        with cols[1]:
+        with c_partial:
             if st.button(
                 "±",
                 key=f"v-partial-{dialog_id}-{field}",
@@ -184,7 +239,7 @@ def _render_field(
             ):
                 ann_mod.upsert(pool, dialog_id, field, "partial", base=ANN_DIR)
                 st.rerun()
-        with cols[2]:
+        with c_correct:
             if st.button(
                 "✓",
                 key=f"v-correct-{dialog_id}-{field}",
@@ -195,13 +250,15 @@ def _render_field(
             ):
                 ann_mod.upsert(pool, dialog_id, field, "correct", base=ANN_DIR)
                 st.rerun()
-        with cols[3]:
-            verdict_str = VERDICT_LABEL.get(current_verdict, "·")
-            st.markdown(
-                f"<div style='padding:6px 0;color:{color};font-weight:600'>"
-                f"Разметка: {verdict_str}</div>",
-                unsafe_allow_html=True,
-            )
+
+        # Body row: prediction content (full width)
+        if prediction is None:
+            st.markdown("_(не обработано)_")
+        elif field in LIST_FIELDS:
+            st.markdown(_list_text(getattr(prediction, field)))
+        else:
+            fe: FieldEvidence = getattr(prediction, field)
+            st.markdown(_field_text(fe.value, fe.quote))
 
 
 # ---- Tab 1: Диалоги ----
@@ -317,9 +374,9 @@ def tab_metrics() -> None:
         [
             {
                 "поле": FIELD_LABELS[fs.field],
-                "✓": fs.correct,
-                "±": fs.partial,
                 "✗": fs.wrong,
+                "±": fs.partial,
+                "✓": fs.correct,
                 "всего": fs.total,
                 "accuracy": fs.accuracy,
                 "soft": fs.soft_accuracy,
@@ -329,17 +386,32 @@ def tab_metrics() -> None:
             for fs in report.fields
         ]
     )
-    st.dataframe(df, hide_index=True, use_container_width=True)
+
+    def _color_verdict_columns(col: pd.Series) -> list[str]:
+        if col.name == "✗":
+            return ["background-color: #fce4e4; color: #b03a3a; font-weight: 600"] * len(col)
+        if col.name == "±":
+            return ["background-color: #fcefd0; color: #8a6a14; font-weight: 600"] * len(col)
+        if col.name == "✓":
+            return ["background-color: #dff0d8; color: #2e6b2e; font-weight: 600"] * len(col)
+        return [""] * len(col)
+
+    styled = (
+        df.style
+        .apply(_color_verdict_columns, axis=0)
+        .format({"accuracy": "{:.0%}", "soft": "{:.0%}", "таргет": "{:.0%}"})
+    )
+    st.dataframe(styled, hide_index=True, use_container_width=True)
 
     st.subheader("Распределение по полям")
     chart_df = pd.DataFrame(
         {
-            FIELD_LABELS[fs.field]: [fs.correct, fs.partial, fs.wrong]
+            FIELD_LABELS[fs.field]: [fs.wrong, fs.partial, fs.correct]
             for fs in report.fields
         },
-        index=["✓", "±", "✗"],
+        index=["✗", "±", "✓"],
     ).T
-    st.bar_chart(chart_df)
+    st.bar_chart(chart_df, color=["#b03a3a", "#c89c1f", "#3a8a3a"])
 
 
 # ---- Tab 3: Настройки ----
@@ -399,6 +471,7 @@ def tab_settings() -> None:
 
 def main() -> None:
     st.set_page_config(page_title="DealMemory", layout="wide")
+    st.markdown(ANNOTATION_CSS, unsafe_allow_html=True)
     st.title("DealMemory")
     tab1, tab2, tab3 = st.tabs(["Диалоги", "Метрики", "Настройки"])
     with tab1:
