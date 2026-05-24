@@ -47,6 +47,12 @@ LIST_FIELDS = {"objections", "promises"}
 VERDICT_LABEL = {"correct": "✓", "partial": "±", "wrong": "✗", None: "·"}
 VERDICT_COLOR = {"correct": "#3a8a3a", "partial": "#c89c1f", "wrong": "#b03a3a"}
 
+MODEL_LABELS = {
+    "GigaChat-2": "GigaChat-2 (Lite) — быстрая, дефолт",
+    "GigaChat-2-Pro": "GigaChat-2-Pro — лучше следует инструкциям",
+    "GigaChat-2-Max": "GigaChat-2-Max — топ, для сложных кейсов",
+}
+
 # Annotation row layout: [title, ✗, ±, ✓] in 4 columns.
 # Streamlit's `type="primary"` does NOT add an HTML attribute (the `kind`
 # prop is emotion-styled and stays React-only), so we instead emit a
@@ -422,8 +428,9 @@ def tab_dialogs() -> None:
                 key=f"act-process-{dialog_id}",
             ):
                 try:
-                    with st.spinner("GigaChat: extracting..."):
-                        with GigaChatClient() as client:
+                    model_name = extract.load_model_name()
+                    with st.spinner(f"GigaChat ({model_name}): extracting..."):
+                        with GigaChatClient(model=model_name) as client:
                             new_pred = extract.extract_one(client, dialog.id, dialog.transcript)
                         _save_prediction(pool, new_pred)
                 except Exception as exc:
@@ -557,29 +564,55 @@ def tab_settings() -> None:
             st.rerun()
 
     st.divider()
+    st.subheader("Модель GigaChat")
+
+    # Canonical Streamlit pattern: setdefault + self-bind + key-only widget.
+    current_model = extract.load_model_name()
+    st.session_state.setdefault("model_widget", current_model)
+    if st.session_state.model_widget not in extract.AVAILABLE_MODELS:
+        st.session_state.model_widget = extract.DEFAULT_MODEL
+    st.session_state.model_widget = st.session_state.model_widget  # self-bind
+
+    model_col, _ = st.columns([2, 3])
+    with model_col:
+        st.selectbox(
+            "Активная модель",
+            extract.AVAILABLE_MODELS,
+            format_func=lambda m: MODEL_LABELS.get(m, m),
+            key="model_widget",
+        )
+    # Persist any change made by the user (compared to what's on disk).
+    if extract.load_model_name() != st.session_state.model_widget:
+        extract.save_model_name(st.session_state.model_widget)
+        st.caption(f"Сохранено: **{st.session_state.model_widget}**")
+
+    st.divider()
     st.subheader("Окружение GigaChat")
     env_rows = [
-        ("GIGACHAT_MODEL", os.environ.get("GIGACHAT_MODEL", "GigaChat")),
         ("GIGACHAT_SCOPE", os.environ.get("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")),
         ("GIGACHAT_VERIFY_SSL", os.environ.get("GIGACHAT_VERIFY_SSL", "false")),
         ("GIGACHAT_AUTH_KEY", "(set)" if os.environ.get("GIGACHAT_AUTH_KEY") else "(MISSING)"),
     ]
-    st.dataframe(
-        pd.DataFrame(env_rows, columns=["переменная", "значение"]),
-        hide_index=True,
-        use_container_width=True,
-    )
+    env_col, _ = st.columns([2, 3])
+    with env_col:
+        st.dataframe(
+            pd.DataFrame(env_rows, columns=["переменная", "значение"]),
+            hide_index=True,
+            width="stretch",
+        )
 
     st.divider()
     st.subheader("Поля и пороги")
-    st.dataframe(
-        pd.DataFrame(
-            [(FIELD_LABELS[f], metrics.FIELD_TARGETS[f]) for f in FIELD_KEYS],
-            columns=["поле", "таргет accuracy"],
-        ),
-        hide_index=True,
-        use_container_width=True,
-    )
+    targets_col, _ = st.columns([2, 3])
+    with targets_col:
+        st.dataframe(
+            pd.DataFrame(
+                [(FIELD_LABELS[f], metrics.FIELD_TARGETS[f]) for f in FIELD_KEYS],
+                columns=["поле", "таргет accuracy"],
+            ),
+            hide_index=True,
+            width="stretch",
+        )
 
 
 # ---- Main ----

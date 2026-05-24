@@ -17,6 +17,13 @@ from deal_memory.schema import DealFacts, Dialog, Prediction
 
 EXTRACTION_TEMPERATURE = 0.1
 PROMPT_PATH = Path("data/config/prompt.txt")
+MODEL_PATH = Path("data/config/model.txt")
+
+# Available on the free PERS tier. Legacy 1st-gen aliases (GigaChat,
+# GigaChat-Pro, GigaChat-Max) are deprecated and redirect to the matching
+# 2nd-gen model — we expose only the canonical 2-* identifiers.
+AVAILABLE_MODELS: tuple[str, ...] = ("GigaChat-2", "GigaChat-2-Pro", "GigaChat-2-Max")
+DEFAULT_MODEL = "GigaChat-2"
 
 
 DEFAULT_SYSTEM_PROMPT = """Ты — система извлечения фактов из стенограмм B2B-продаж IT-оборудования.
@@ -69,6 +76,28 @@ def load_system_prompt(path: Path = PROMPT_PATH) -> str:
 def save_system_prompt(text: str, path: Path = PROMPT_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def load_model_name(path: Path = MODEL_PATH) -> str:
+    """Resolve current model: file → env GIGACHAT_MODEL → DEFAULT_MODEL.
+    Values not in AVAILABLE_MODELS fall through to the default."""
+    import os
+
+    if path.exists():
+        name = path.read_text(encoding="utf-8").strip()
+        if name in AVAILABLE_MODELS:
+            return name
+    env = os.environ.get("GIGACHAT_MODEL", "").strip()
+    if env in AVAILABLE_MODELS:
+        return env
+    return DEFAULT_MODEL
+
+
+def save_model_name(name: str, path: Path = MODEL_PATH) -> None:
+    if name not in AVAILABLE_MODELS:
+        raise ValueError(f"Unknown model {name!r}. Allowed: {AVAILABLE_MODELS}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(name, encoding="utf-8")
 
 
 def _build_messages(

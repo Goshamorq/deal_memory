@@ -32,7 +32,7 @@ def extract_run(
     if out is None:
         out = Path("data/eval-runs") / pool_path.name
 
-    client = GigaChatClient()
+    client = GigaChatClient(model=extract.load_model_name())
     predictions = []
     with console.status(f"Extracting {len(dialogs)} dialogs via GigaChat...") as status:
         try:

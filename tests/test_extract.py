@@ -73,3 +73,32 @@ def test_extract_strips_markdown_fences():
     pred = extract.extract_one(client, "id3", "transcript")
     assert pred.prediction.budget.value == "1 млн ₽"
     assert pred.parse_repaired is False
+
+
+def test_load_model_name_falls_back_to_default(tmp_path, monkeypatch):
+    monkeypatch.delenv("GIGACHAT_MODEL", raising=False)
+    assert extract.load_model_name(tmp_path / "missing.txt") == extract.DEFAULT_MODEL
+
+
+def test_save_then_load_model_name(tmp_path):
+    p = tmp_path / "model.txt"
+    extract.save_model_name("GigaChat-2-Pro", p)
+    assert extract.load_model_name(p) == "GigaChat-2-Pro"
+
+
+def test_save_model_name_rejects_unknown(tmp_path):
+    import pytest
+    with pytest.raises(ValueError, match="Unknown model"):
+        extract.save_model_name("InventedModel", tmp_path / "model.txt")
+
+
+def test_load_model_name_ignores_garbage_in_file(tmp_path, monkeypatch):
+    monkeypatch.delenv("GIGACHAT_MODEL", raising=False)
+    p = tmp_path / "model.txt"
+    p.write_text("not-a-real-model", encoding="utf-8")
+    assert extract.load_model_name(p) == extract.DEFAULT_MODEL
+
+
+def test_load_model_name_falls_back_to_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("GIGACHAT_MODEL", "GigaChat-2-Max")
+    assert extract.load_model_name(tmp_path / "missing.txt") == "GigaChat-2-Max"
