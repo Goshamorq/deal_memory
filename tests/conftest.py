@@ -15,10 +15,7 @@ class FakeLLMClient:
     that receives kwargs of each .chat() call and returns the string.
     """
 
-    def __init__(
-        self,
-        responses: list[str] | Callable[..., str],
-    ) -> None:
+    def __init__(self, responses: list[str] | Callable[..., str]) -> None:
         self._responses = responses
         self._idx = 0
         self.calls: list[dict[str, Any]] = []
