@@ -1,32 +1,20 @@
-# DealMemory MVP-1
+# DealMemory
 
 Учебный thin-slice прототип вертикальной «памяти сделки» для B2B-продаж IT-оборудования.
 
-Пайплайн:
-1. Генерирует русскоязычные диалоги B2B IT-продаж с ground truth по 6 полям сделки.
-2. Извлекает поля из транскриптов через GigaChat (LLM + JSON schema).
-3. Считает F1 и hallucination rate против ground truth.
-4. Streamlit-UI для просмотра диалогов, сравнения и сводных метрик.
+## Что делает
+
+1. Хранит **пулы диалогов** в JSONL (`data/pools/`) — телефонные звонки и email-цепочки B2B IT-продаж.
+2. По кнопке **«Обработать»** прогоняет диалог через GigaChat и извлекает 6 ключевых полей сделки в JSON (с repair-pass на ошибку схемы).
+3. Под каждым полем — три кнопки **✗ ± ✓** для ручной оценки качества извлечения. Разметка живёт в `data/annotations/`.
+4. Вкладка «Метрики» агрегирует разметку и сравнивает с таргетами accuracy из Gate 2.
+5. Вкладка «Настройки» — редактор system prompt с применением на лету.
 
 ## Setup
 
-```bash
-uv sync --all-extras
-cp .env.example .env
-# заполнить GIGACHAT_AUTH_KEY в .env
-```
+См. [QUICKSTART.md](QUICKSTART.md) — 8 шагов от `git clone` до запущенного UI.
 
-## Команды
-
-```bash
-uv run dm synth generate --n 50            # 50 синтетических диалогов → data/synthetic/v1.jsonl
-uv run dm extract run --in data/synthetic/v1.jsonl
-uv run dm eval score --predictions data/eval-runs/<ts>.jsonl --truth data/synthetic/v1.jsonl
-uv run dm ui                                # Streamlit на :8501
-uv run pytest -q                            # юнит-тесты с FakeLLMClient
-```
-
-## Поля сделки
+## 6 полей сделки
 
 | Поле | Описание |
 |---|---|
@@ -45,14 +33,33 @@ Python 3.11+, pydantic, httpx, typer, streamlit, pytest. Менеджер пак
 
 ```
 src/deal_memory/
-├── schema.py      # Pydantic-модели
-├── gigachat.py    # клиент GigaChat (OAuth + chat)
-├── synth.py       # генератор синтетики
-├── extract.py     # экстрактор 6 полей
-├── eval.py        # метрики и runner
-├── storage.py     # JSONL I/O
-├── ui.py          # Streamlit (3 страницы)
-└── cli.py         # typer-команды
+├── schema.py        # Pydantic-модели (Dialog, DealFacts, Prediction, Annotation)
+├── gigachat.py      # клиент GigaChat (OAuth + chat, JSON-mode)
+├── extract.py       # экстрактор 6 полей + load/save system prompt
+├── annotations.py   # хранилище ручной разметки (JSONL per-pool)
+├── metrics.py       # агрегация ✗/±/✓ → per-field accuracy + таргеты
+├── storage.py       # JSONL I/O
+├── ui.py            # Streamlit (3 вкладки + wizard)
+└── cli.py           # typer: dm extract run | dm ui
 ```
 
-Полный план — [plan-mvp1.md](docs/roadmap.md) и Gate 2 PDF.
+Данные:
+
+```
+data/
+├── pools/<pool>.jsonl          # ✓ в git — диалоги
+├── eval-runs/<pool>.jsonl      # gitignored — predictions GigaChat
+├── annotations/<pool>.jsonl    # gitignored — ✗/±/✓ разметка
+└── config/prompt.txt           # ✓ в git — текущий system prompt
+```
+
+## Тесты
+
+```bash
+uv run pytest -q     # 15 тестов с FakeLLMClient, без сети
+```
+
+## Дополнительно
+
+- [CLAUDE.md](CLAUDE.md) — guidelines для агентного кодинга (Karpathy-style)
+- [docs/roadmap.md](docs/roadmap.md) — что после MVP-1 (STT, Bitrix24, risk scoring)
