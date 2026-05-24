@@ -365,7 +365,13 @@ def tab_dialogs() -> None:
 
     col_pool, col_dialog = st.columns(2)
     with col_pool:
-        pool_idx = pools.index(st.session_state["pool_select"]) if st.session_state.get("pool_select") in pools else 0
+        saved_pool = st.session_state.get("pool_select")
+        if saved_pool in pools:
+            pool_idx = pools.index(saved_pool)
+        elif "manual-v1" in pools:
+            pool_idx = pools.index("manual-v1")
+        else:
+            pool_idx = 0
         pool = st.selectbox("Пул диалогов", pools, index=pool_idx, key="pool_select")
     dialogs = _load_dialogs(pool)
     predictions = _load_predictions(pool)
@@ -447,7 +453,14 @@ def tab_metrics() -> None:
     if not pools:
         st.warning("Нет пулов.")
         return
-    pool = st.selectbox("Пул", pools, key="metrics_pool")
+    saved_pool = st.session_state.get("metrics_pool")
+    if saved_pool in pools:
+        metrics_idx = pools.index(saved_pool)
+    elif "manual-v1" in pools:
+        metrics_idx = pools.index("manual-v1")
+    else:
+        metrics_idx = 0
+    pool = st.selectbox("Пул", pools, index=metrics_idx, key="metrics_pool")
     annotations = _load_annotations(pool)
     if not annotations:
         st.info(
