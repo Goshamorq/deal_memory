@@ -109,8 +109,69 @@ div[data-testid="stHorizontalBlock"]:has(.dm-verdict-correct):has(> div[data-tes
   > div[data-testid="stColumn"]:nth-child(4) button {
     background: #3a8a3a !important; color: #ffffff !important; border-color: #3a8a3a !important;
 }
+
+/* Wizard re-open button — purple. Scoped via st-key-<key> class
+   which Streamlit places on the element-container of any keyed widget. */
+.st-key-reopen_wizard button {
+    background: #7b3ff2 !important;
+    color: #ffffff !important;
+    border-color: #7b3ff2 !important;
+}
+.st-key-reopen_wizard button:hover {
+    background: #6633d4 !important;
+    border-color: #6633d4 !important;
+}
 </style>
 """
+
+WIZARD_STEPS: tuple[dict[str, str], ...] = (
+    {
+        "title": "📁 Вкладка «Диалоги»",
+        "body": (
+            "Здесь хранятся **пулы B2B IT-диалогов** — JSONL-файлы из `data/pools/`. "
+            "Сверху два dropdown'а: выбор пула (например `manual-v1`, `manual-big`) и "
+            "конкретного диалога внутри пула.  \n\n"
+            "Слева ты увидишь сам диалог в виде чата: реплики менеджера справа, клиента слева. "
+            "Поддерживаются и телефонные звонки, и переписки в формате корпоративной почты."
+        ),
+    },
+    {
+        "title": "⚙️ Обработка и разметка (правая половина)",
+        "body": (
+            "Справа от диалога — 6 ключевых полей сделки (бюджет, ЛПР, тех. требования, "
+            "возражения, обещания, следующий шаг).  \n\n"
+            "Нажми **«Обработать»** — GigaChat извлечёт значения за 5-15 секунд и заполнит "
+            "поля. Под каждым полем три цветные кнопки **✗ ± ✓** для ручной оценки качества:  \n"
+            "• 🔴 ✗ — неверно (галлюцинация или ошибка)  \n"
+            "• 🟡 ± — частично (близко, но не точно)  \n"
+            "• 🟢 ✓ — верно  \n\n"
+            "Разметка сохраняется в `data/annotations/<пул>.jsonl` сразу при клике."
+        ),
+    },
+    {
+        "title": "📊 Вкладка «Метрики»",
+        "body": (
+            "Агрегированная статистика по твоей разметке для выбранного пула:  \n"
+            "• KPI: всего разметок, macro accuracy (доля ✓), soft accuracy (где ± считается как 0.5)  \n"
+            "• Таблица per-field: количество ✗/±/✓, accuracy, таргет, 🟢/🔴 индикатор попадания в порог  \n"
+            "• Bar chart распределения ✗/±/✓ по полям  \n\n"
+            "Таргеты accuracy наследуются из Gate 2: budget ≥ 0.85, ЛПР ≥ 0.75 и т.д. "
+            "Считается из `data/annotations/`, никаких GigaChat-вызовов."
+        ),
+    },
+    {
+        "title": "🛠 Вкладка «Настройки»",
+        "body": (
+            "Редактор **system prompt** — текст, который GigaChat использует при каждом "
+            "извлечении. Меняй и нажимай **«Сохранить»** — новый prompt применится мгновенно "
+            "к следующему «Обработать», без рестарта Streamlit.  \n\n"
+            "Файл живёт в `data/config/prompt.txt` и попадает в git. Кнопка «Восстановить "
+            "дефолт» возвращает встроенный prompt из `extract.py`.  \n\n"
+            "Ниже — env-переменные подключения к GigaChat (модель, scope, статус ключа) и "
+            "таблица таргетов по полям."
+        ),
+    },
+)
 
 
 # ---- Speaker-aware transcript renderer ----
@@ -489,10 +550,55 @@ def tab_settings() -> None:
 # ---- Main ----
 
 
+@st.dialog("Знакомство с DealMemory", width="large")
+def _wizard_dialog() -> None:
+    step = st.session_state.get("wizard_step", 0)
+    step = max(0, min(step, len(WIZARD_STEPS) - 1))
+    s = WIZARD_STEPS[step]
+
+    st.subheader(s["title"])
+    st.markdown(s["body"])
+    st.caption(f"Шаг {step + 1} из {len(WIZARD_STEPS)}")
+
+    nav = st.columns([1, 1, 4, 1])
+    with nav[0]:
+        if step > 0 and st.button("← Назад", use_container_width=True, key=f"wiz-back-{step}"):
+            st.session_state.wizard_step = step - 1
+            st.rerun()
+    with nav[3]:
+        if step < len(WIZARD_STEPS) - 1:
+            if st.button("Далее →", type="primary", use_container_width=True, key=f"wiz-next-{step}"):
+                st.session_state.wizard_step = step + 1
+                st.rerun()
+        else:
+            if st.button("Готово", type="primary", use_container_width=True, key=f"wiz-done-{step}"):
+                st.session_state.wizard_open = False
+                st.session_state.wizard_step = 0
+                st.rerun()
+
+
+def _init_wizard_state() -> None:
+    """First visit per session → auto-open the wizard."""
+    if "wizard_initialized" not in st.session_state:
+        st.session_state.wizard_initialized = True
+        st.session_state.wizard_open = True
+        st.session_state.wizard_step = 0
+
+
 def main() -> None:
     st.set_page_config(page_title="DealMemory", layout="wide")
     st.markdown(ANNOTATION_CSS, unsafe_allow_html=True)
-    st.title("DealMemory")
+    _init_wizard_state()
+
+    title_col, reopen_col = st.columns([10, 1])
+    with title_col:
+        st.title("DealMemory")
+    with reopen_col:
+        if st.button("🪄 Wizard", key="reopen_wizard", use_container_width=True):
+            st.session_state.wizard_open = True
+            st.session_state.wizard_step = 0
+            st.rerun()
+
     tab1, tab2, tab3 = st.tabs(["Диалоги", "Метрики", "Настройки"])
     with tab1:
         tab_dialogs()
@@ -500,6 +606,9 @@ def main() -> None:
         tab_metrics()
     with tab3:
         tab_settings()
+
+    if st.session_state.get("wizard_open", False):
+        _wizard_dialog()
 
 
 main()
