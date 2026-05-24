@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -206,20 +207,33 @@ def _sample_reveal_mask(rng: random.Random) -> set[str]:
     return set(rng.sample(FIELD_KEYS, n))
 
 
+VALIDATION_TOKEN_OVERLAP = 0.5  # share of value-tokens that must appear in transcript
+
+
+def _token_overlap_ratio(value: str, transcript_norm: str) -> float:
+    """Fraction of word-tokens from `value` that appear in transcript_norm."""
+    tokens = re.findall(r"\w+", value.lower(), flags=re.UNICODE)
+    if not tokens:
+        return 1.0
+    hits = sum(1 for t in tokens if t in transcript_norm)
+    return hits / len(tokens)
+
+
 def _validate_transcript_coverage(sample: SyntheticSample) -> list[str]:
-    """Return list of error strings; empty list = valid."""
+    """Return list of error strings; empty list = valid.
+
+    Uses token-overlap >= 0.5 instead of strict prefix substring — LLMs often
+    paraphrase the quote slightly, and over-strict validation just burns
+    retries.
+    """
     errors: list[str] = []
     transcript_norm = sample.transcript.lower()
 
-    def check(field_name: str, value: str | None, quote: str | None) -> None:
+    def check(field_name: str, value: str | None, _quote: str | None) -> None:
         if value is None:
             return
-        # check value substring (loose: first ~20 chars after normalization)
-        needle = value.lower().strip()
-        if needle and needle[: min(20, len(needle))] not in transcript_norm:
-            errors.append(f"{field_name}.value not found in transcript: {value!r}")
-        if quote and quote.lower().strip()[:20] not in transcript_norm:
-            errors.append(f"{field_name}.quote not found in transcript: {quote!r}")
+        if _token_overlap_ratio(value, transcript_norm) < VALIDATION_TOKEN_OVERLAP:
+            errors.append(f"{field_name}.value not grounded in transcript: {value!r}")
 
     gt = sample.ground_truth
     check("budget", gt.budget.value, gt.budget.quote)

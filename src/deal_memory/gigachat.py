@@ -55,7 +55,10 @@ class GigaChatClient:
         self._model = model or os.environ.get("GIGACHAT_MODEL", "GigaChat")
         verify_env = os.environ.get("GIGACHAT_VERIFY_SSL", "false").lower()
         self._verify = verify_env in {"1", "true", "yes"}
-        self._client = httpx.Client(timeout=60.0, verify=self._verify)
+        # Single transport with 2 retries on connect errors so a transient
+        # 5xx mid-batch doesn't sink a 50-call run.
+        transport = httpx.HTTPTransport(retries=2, verify=self._verify)
+        self._client = httpx.Client(timeout=60.0, transport=transport, verify=self._verify)
         self._token: _Token | None = None
 
     def close(self) -> None:
