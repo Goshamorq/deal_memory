@@ -433,6 +433,10 @@ def tab_dialogs() -> None:
                         with GigaChatClient(model=model_name) as client:
                             new_pred = extract.extract_one(client, dialog.id, dialog.transcript)
                         _save_prediction(pool, new_pred)
+                        # Stale verdicts from the previous prediction no
+                        # longer correspond to what's now on screen. Drop
+                        # them (no-op on first processing).
+                        ann_mod.clear_dialog(pool, dialog.id, base=ANN_DIR)
                 except Exception as exc:
                     st.error(f"Extraction failed: {exc}")
                 else:
