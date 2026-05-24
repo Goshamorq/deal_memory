@@ -357,46 +357,69 @@ def _render_field(
 # ---- Tab 1: Диалоги ----
 
 
+def _on_pool_change() -> None:
+    st.session_state.current_pool = st.session_state.pool_widget
+
+
+def _on_dialog_change() -> None:
+    st.session_state.current_dialog_id = st.session_state.dialog_widget
+
+
 def tab_dialogs() -> None:
     pools = _list_pools()
     if not pools:
         st.warning("Нет пулов в data/pools/. Добавь хотя бы один JSONL-файл.")
         return
 
+    # Authoritative pool selection — our own state, not the widget's.
+    saved_pool = st.session_state.get("current_pool")
+    if saved_pool not in pools:
+        saved_pool = "manual-v1" if "manual-v1" in pools else pools[0]
+        st.session_state.current_pool = saved_pool
+
     col_pool, col_dialog = st.columns(2)
     with col_pool:
-        saved_pool = st.session_state.get("pool_select")
-        if saved_pool in pools:
-            pool_idx = pools.index(saved_pool)
-        elif "manual-v1" in pools:
-            pool_idx = pools.index("manual-v1")
-        else:
-            pool_idx = 0
-        pool = st.selectbox("Пул диалогов", pools, index=pool_idx, key="pool_select")
+        st.selectbox(
+            "Пул диалогов",
+            pools,
+            index=pools.index(saved_pool),
+            key="pool_widget",
+            on_change=_on_pool_change,
+        )
+
+    pool = st.session_state.current_pool
     dialogs = _load_dialogs(pool)
     predictions = _load_predictions(pool)
     annotations = _load_annotations(pool)
 
-    with col_dialog:
-        dialog_options = [d.id for d in dialogs]
+    dialog_options = [d.id for d in dialogs]
 
+    # Authoritative dialog selection. Reset when current_dialog_id is from a
+    # different pool (won't be in this pool's options).
+    saved_did = st.session_state.get("current_dialog_id")
+    if saved_did not in dialog_options:
+        saved_did = dialog_options[0] if dialog_options else None
+        if saved_did is not None:
+            st.session_state.current_dialog_id = saved_did
+
+    with col_dialog:
         def fmt(did: str) -> str:
             d = next(x for x in dialogs if x.id == did)
             mark = "✓" if did in predictions else "·"
             scn = f"  ({d.scenario})" if d.scenario else ""
             return f"{mark}  {did}{scn}"
 
-        # Persist selection across st.rerun() — relying on key= alone proved
-        # flaky when buttons inside the right column trigger a rerun.
-        saved_did = st.session_state.get("dialog_select")
-        dialog_idx = dialog_options.index(saved_did) if saved_did in dialog_options else 0
-        dialog_id = st.selectbox(
-            "Диалог",
-            dialog_options,
-            index=dialog_idx,
-            format_func=fmt,
-            key="dialog_select",
-        )
+        if dialog_options:
+            st.selectbox(
+                "Диалог",
+                dialog_options,
+                index=dialog_options.index(saved_did),
+                format_func=fmt,
+                key="dialog_widget",
+                on_change=_on_dialog_change,
+            )
+
+    dialog_id = st.session_state.get("current_dialog_id")
     if dialog_id is None:
         return
     dialog = next(d for d in dialogs if d.id == dialog_id)
