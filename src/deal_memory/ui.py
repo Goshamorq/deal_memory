@@ -89,19 +89,20 @@ div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child
     background: #dff0d8 !important; color: #2e6b2e !important; border-color: #3a8a3a !important;
 }
 
-/* Active verdict: marker <div class="dm-verdict-wrong|partial|correct"> is
-   rendered as a sibling element-container immediately BEFORE the columns
-   block. CSS then targets the next sibling's matching column button. */
-div[data-testid="stElementContainer"]:has(.dm-verdict-wrong) + div[data-testid="stElementContainer"]
-  div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(2) button {
+/* Active verdict: a hidden <span class="dm-verdict-X"> lives inside the
+   title column of the SAME horizontal block as the buttons. Using
+   :has() to locate it ensures we colour buttons in only THIS block —
+   no sibling-container hopping. */
+div[data-testid="stHorizontalBlock"]:has(.dm-verdict-wrong)
+  > div[data-testid="stColumn"]:nth-child(2) button {
     background: #b03a3a !important; color: #ffffff !important; border-color: #b03a3a !important;
 }
-div[data-testid="stElementContainer"]:has(.dm-verdict-partial) + div[data-testid="stElementContainer"]
-  div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(3) button {
+div[data-testid="stHorizontalBlock"]:has(.dm-verdict-partial)
+  > div[data-testid="stColumn"]:nth-child(3) button {
     background: #c89c1f !important; color: #ffffff !important; border-color: #c89c1f !important;
 }
-div[data-testid="stElementContainer"]:has(.dm-verdict-correct) + div[data-testid="stElementContainer"]
-  div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(4) button {
+div[data-testid="stHorizontalBlock"]:has(.dm-verdict-correct)
+  > div[data-testid="stColumn"]:nth-child(4) button {
     background: #3a8a3a !important; color: #ffffff !important; border-color: #3a8a3a !important;
 }
 </style>
@@ -211,19 +212,17 @@ def _render_field(
     label = FIELD_LABELS[field]
 
     with st.container(border=True):
-        # Marker for CSS sibling-targeting: tells the very-next-sibling
-        # element-container (the columns block) which annotation column
-        # should render as "active" (filled with its colour).
-        if current_verdict:
-            st.markdown(
-                f'<div class="dm-verdict dm-verdict-{current_verdict}"></div>',
-                unsafe_allow_html=True,
-            )
-
         # Header row: 4 cols — [title, ✗, ±, ✓].
         title_col, c_wrong, c_partial, c_correct = st.columns([6, 1, 1, 1])
         with title_col:
-            st.markdown(f"**{label}**")
+            # Embed a hidden marker inside the title so CSS :has() inside
+            # the same horizontal block knows which button to colour.
+            marker = (
+                f'<span class="dm-verdict dm-verdict-{current_verdict}"></span>'
+                if current_verdict
+                else ""
+            )
+            st.markdown(f"**{label}**{marker}", unsafe_allow_html=True)
         with c_wrong:
             if st.button(
                 "✗",
