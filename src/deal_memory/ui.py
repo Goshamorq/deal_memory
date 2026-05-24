@@ -452,6 +452,9 @@ def tab_dialogs() -> None:
                     storage.write_jsonl(_predictions_path(pool), cur.values())
                 else:
                     _predictions_path(pool).unlink(missing_ok=True)
+                # Also drop all annotations for this dialog — they no longer
+                # correspond to anything visible.
+                ann_mod.clear_dialog(pool, dialog_id, base=ANN_DIR)
                 st.rerun()
 
         if pred is not None and pred.parse_repaired:

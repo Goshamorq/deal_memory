@@ -32,3 +32,26 @@ def test_clear_removes_cell_and_file_when_empty(tmp_path: Path):
 def test_unknown_field_raises(tmp_path: Path):
     with pytest.raises(ValueError, match="Unknown field"):
         ann_mod.upsert("p1", "d1", "not_a_field", "correct", base=tmp_path)
+
+
+def test_clear_dialog_removes_all_fields_for_one_dialog(tmp_path: Path):
+    ann_mod.upsert("p1", "d1", "budget", "correct", base=tmp_path)
+    ann_mod.upsert("p1", "d1", "decision_maker", "wrong", base=tmp_path)
+    ann_mod.upsert("p1", "d2", "budget", "partial", base=tmp_path)
+
+    removed = ann_mod.clear_dialog("p1", "d1", base=tmp_path)
+    assert removed == 2
+
+    remaining = ann_mod.load_pool("p1", base=tmp_path)
+    assert set(remaining.keys()) == {("d2", "budget")}
+
+
+def test_clear_dialog_removes_file_when_pool_empty(tmp_path: Path):
+    ann_mod.upsert("p1", "d1", "budget", "correct", base=tmp_path)
+    ann_mod.clear_dialog("p1", "d1", base=tmp_path)
+    assert not (tmp_path / "p1.jsonl").exists()
+
+
+def test_clear_dialog_noop_when_nothing_to_remove(tmp_path: Path):
+    removed = ann_mod.clear_dialog("p1", "ghost", base=tmp_path)
+    assert removed == 0

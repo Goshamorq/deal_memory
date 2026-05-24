@@ -59,3 +59,22 @@ def clear(
         p = annotations_path(pool, base)
         if p.exists():
             p.unlink()
+
+
+def clear_dialog(
+    pool: str,
+    dialog_id: str,
+    base: Path = Path("data/annotations"),
+) -> int:
+    """Remove all verdicts for a (pool, dialog_id). Returns number removed."""
+    current = load_pool(pool, base)
+    removed = [k for k in current if k[0] == dialog_id]
+    for k in removed:
+        current.pop(k, None)
+    if current:
+        write_jsonl(annotations_path(pool, base), current.values())
+    else:
+        p = annotations_path(pool, base)
+        if p.exists():
+            p.unlink()
+    return len(removed)
