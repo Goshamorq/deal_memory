@@ -434,7 +434,12 @@ def tab_dialogs() -> None:
         action_col1, action_col2 = st.columns([1, 1])
         with action_col1:
             label = "Переобработать" if pred is not None else "Обработать"
-            if st.button(label, type="primary", use_container_width=True):
+            if st.button(
+                label,
+                type="primary",
+                use_container_width=True,
+                key=f"act-process-{dialog_id}",
+            ):
                 try:
                     with st.spinner("GigaChat: extracting..."):
                         with GigaChatClient() as client:
@@ -445,17 +450,30 @@ def tab_dialogs() -> None:
                 else:
                     st.rerun()
         with action_col2:
-            if pred is not None and st.button("Очистить предсказание", use_container_width=True):
-                cur = _load_predictions(pool)
-                cur.pop(dialog_id, None)
-                if cur:
-                    storage.write_jsonl(_predictions_path(pool), cur.values())
+            if pred is not None and st.button(
+                "Очистить предсказание",
+                use_container_width=True,
+                key=f"act-clear-{dialog_id}",
+            ):
+                # Re-read both pool and dialog_id from session_state at the
+                # moment of the click — never from closure. This makes the
+                # operation immune to any state drift between the top-of-
+                # function capture and the click handler execution (e.g. a
+                # stale JS bundle dispatching a delayed on_change for the
+                # dialog selectbox).
+                pool_now = st.session_state.get("current_pool")
+                dialog_id_now = st.session_state.get("current_dialog_id")
+                if not pool_now or not dialog_id_now:
+                    st.error("Не удалось определить пул/диалог для очистки.")
                 else:
-                    _predictions_path(pool).unlink(missing_ok=True)
-                # Also drop all annotations for this dialog — they no longer
-                # correspond to anything visible.
-                ann_mod.clear_dialog(pool, dialog_id, base=ANN_DIR)
-                st.rerun()
+                    cur = _load_predictions(pool_now)
+                    cur.pop(dialog_id_now, None)
+                    if cur:
+                        storage.write_jsonl(_predictions_path(pool_now), cur.values())
+                    else:
+                        _predictions_path(pool_now).unlink(missing_ok=True)
+                    ann_mod.clear_dialog(pool_now, dialog_id_now, base=ANN_DIR)
+                    st.rerun()
 
         if pred is not None and pred.parse_repaired:
             st.info("Это предсказание прошло через repair-pass.")
