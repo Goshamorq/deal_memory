@@ -563,39 +563,42 @@ def _wizard_dialog() -> None:
     nav = st.columns([1, 1, 4, 1])
     with nav[0]:
         if step > 0 and st.button("← Назад", use_container_width=True, key=f"wiz-back-{step}"):
+            # Re-trigger one-shot show flag so the dialog re-renders on next run.
+            st.session_state.wizard_show_now = True
             st.session_state.wizard_step = step - 1
             st.rerun()
     with nav[3]:
         if step < len(WIZARD_STEPS) - 1:
             if st.button("Далее →", type="primary", use_container_width=True, key=f"wiz-next-{step}"):
+                st.session_state.wizard_show_now = True
                 st.session_state.wizard_step = step + 1
                 st.rerun()
         else:
             if st.button("Готово", type="primary", use_container_width=True, key=f"wiz-done-{step}"):
-                st.session_state.wizard_open = False
+                # Don't re-trigger — dialog stays closed.
                 st.session_state.wizard_step = 0
                 st.rerun()
-
-
-def _init_wizard_state() -> None:
-    """First visit per session → auto-open the wizard."""
-    if "wizard_initialized" not in st.session_state:
-        st.session_state.wizard_initialized = True
-        st.session_state.wizard_open = True
-        st.session_state.wizard_step = 0
 
 
 def main() -> None:
     st.set_page_config(page_title="DealMemory", layout="wide")
     st.markdown(ANNOTATION_CSS, unsafe_allow_html=True)
-    _init_wizard_state()
+
+    # One-shot trigger: dialog shows on the run where wizard_show_now is True
+    # and is consumed immediately. Avoids reopening on every pool/dialog
+    # change (which all cause reruns).
+    if "wizard_initialized" not in st.session_state:
+        st.session_state.wizard_initialized = True
+        st.session_state.wizard_show_now = True
+        st.session_state.wizard_step = 0
+    show_wizard = st.session_state.pop("wizard_show_now", False)
 
     title_col, reopen_col = st.columns([10, 1])
     with title_col:
         st.title("DealMemory")
     with reopen_col:
         if st.button("🪄 Wizard", key="reopen_wizard", use_container_width=True):
-            st.session_state.wizard_open = True
+            st.session_state.wizard_show_now = True
             st.session_state.wizard_step = 0
             st.rerun()
 
@@ -607,7 +610,7 @@ def main() -> None:
     with tab3:
         tab_settings()
 
-    if st.session_state.get("wizard_open", False):
+    if show_wizard:
         _wizard_dialog()
 
 
