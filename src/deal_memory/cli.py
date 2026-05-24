@@ -1,74 +1,44 @@
-"""Typer entry point — all subcommands wired up."""
+"""Typer entry point."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
 from dotenv import load_dotenv
 from rich.console import Console
-from rich.table import Table
 
-from deal_memory import eval as eval_mod
-from deal_memory import extract, storage, synth
+from deal_memory import extract, storage
 from deal_memory.gigachat import GigaChatClient
-from deal_memory.schema import Prediction, SyntheticSample
+from deal_memory.schema import Dialog
 
 load_dotenv()
 console = Console()
 
-app = typer.Typer(help="DealMemory MVP-1 — synth/extract/eval/ui pipeline.")
-
-synth_app = typer.Typer(help="Synthetic dialog generation.")
-extract_app = typer.Typer(help="LLM extraction over transcripts.")
-eval_app = typer.Typer(help="Score predictions vs ground truth.")
-app.add_typer(synth_app, name="synth")
+app = typer.Typer(help="DealMemory MVP-1 — pool-based extraction pipeline.")
+extract_app = typer.Typer(help="LLM extraction over a pool of dialogs.")
 app.add_typer(extract_app, name="extract")
-app.add_typer(eval_app, name="eval")
-
-
-@synth_app.command("generate")
-def synth_generate(
-    n: int = typer.Option(50, "--n", help="Number of dialogs to generate."),
-    out: Path = typer.Option(
-        Path("data/synthetic/v1.jsonl"), "--out", help="Output JSONL path."
-    ),
-    seed: int | None = typer.Option(None, "--seed", help="Random seed for reproducibility."),
-) -> None:
-    """Generate N synthetic B2B IT sales dialogs with ground-truth labels."""
-    client = GigaChatClient()
-    samples = []
-    with console.status(f"Generating {n} dialogs via GigaChat...") as status:
-        try:
-            for i, sample in enumerate(synth.generate(client, n, seed=seed), start=1):
-                samples.append(sample)
-                status.update(f"Generated {i}/{n}")
-        finally:
-            client.close()
-    count = storage.write_jsonl(out, samples)
-    console.print(f"[green]Wrote {count} samples to {out}[/green]")
 
 
 @extract_app.command("run")
 def extract_run(
-    in_path: Path = typer.Option(..., "--in", help="Synthetic JSONL with transcripts."),
+    pool_path: Path = typer.Option(..., "--in", help="Pool JSONL with Dialog rows."),
     out: Path | None = typer.Option(
-        None, "--out", help="Output JSONL (default: data/eval-runs/<ts>.jsonl)."
+        None, "--out", help="Output JSONL (default: data/eval-runs/<pool>.jsonl)."
     ),
 ) -> None:
-    """Run extraction over a synthetic-samples JSONL."""
-    samples = storage.load_jsonl(in_path, SyntheticSample)
+    """Batch-extract a whole pool. UI does single-dialog extraction on demand;
+    this is for seeding predictions or for CLI workflows."""
+    dialogs = storage.load_jsonl(pool_path, Dialog)
     if out is None:
-        ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-        out = Path("data/eval-runs") / f"{ts}.jsonl"
+        out = Path("data/eval-runs") / pool_path.name
 
     client = GigaChatClient()
     predictions = []
-    with console.status(f"Extracting {len(samples)} transcripts via GigaChat...") as status:
+    with console.status(f"Extracting {len(dialogs)} dialogs via GigaChat...") as status:
         try:
-            for i, sample in enumerate(samples, start=1):
-                predictions.append(extract.extract_one(client, sample.id, sample.transcript))
-                status.update(f"Extracted {i}/{len(samples)}")
+            for i, d in enumerate(dialogs, start=1):
+                predictions.append(extract.extract_one(client, d.id, d.transcript))
+                status.update(f"Extracted {i}/{len(dialogs)}")
         finally:
             client.close()
     count = storage.write_jsonl(out, predictions)
@@ -76,59 +46,6 @@ def extract_run(
     console.print(
         f"[green]Wrote {count} predictions to {out}[/green] (repair-passes: {repaired})"
     )
-
-
-def _render_report(report: eval_mod.EvalReport) -> Table:
-    t = Table(title=f"Eval report (n={report.n_samples})")
-    t.add_column("field")
-    t.add_column("TP", justify="right")
-    t.add_column("FP", justify="right")
-    t.add_column("FN", justify="right")
-    t.add_column("precision", justify="right")
-    t.add_column("recall", justify="right")
-    t.add_column("F1", justify="right", style="bold")
-    for fm in report.fields:
-        t.add_row(
-            fm.field,
-            str(fm.tp),
-            str(fm.fp),
-            str(fm.fn),
-            f"{fm.precision:.2f}",
-            f"{fm.recall:.2f}",
-            f"{fm.f1:.2f}",
-        )
-    return t
-
-
-@eval_app.command("score")
-def eval_score(
-    truth_path: Path = typer.Option(
-        ..., "--truth", help="Synthetic-samples JSONL with ground truth."
-    ),
-    predictions: Path = typer.Option(
-        ..., "--predictions", help="Predictions JSONL from `dm extract`."
-    ),
-    report_out: Path | None = typer.Option(
-        None, "--report-out", help="Optional path to dump the report as JSON."
-    ),
-) -> None:
-    """Score predictions vs ground truth; prints per-field F1 + hallucination rate."""
-    truth = storage.load_jsonl(truth_path, SyntheticSample)
-    preds = storage.load_jsonl(predictions, Prediction)
-    report = eval_mod.score(truth, preds)
-
-    console.print(_render_report(report))
-    console.print(
-        f"\n[bold]Macro F1:[/bold] {report.macro_f1:.3f}    "
-        f"[bold]Hallucination rate:[/bold] {report.hallucination_rate:.1%} "
-        f"({report.hallucination_count}/{report.hallucination_total})    "
-        f"[bold]Coverage:[/bold] {report.coverage:.1%} "
-        f"({report.coverage_correct}/{report.coverage_total})"
-    )
-    if report_out is not None:
-        report_out.parent.mkdir(parents=True, exist_ok=True)
-        report_out.write_text(report.model_dump_json(indent=2), encoding="utf-8")
-        console.print(f"[green]Report written to {report_out}[/green]")
 
 
 @app.command()

@@ -7,17 +7,19 @@ is out of scope for MVP-1.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
 
 from deal_memory.gigachat import LLMClient
-from deal_memory.schema import DealFacts, Prediction, SyntheticSample
+from deal_memory.schema import DealFacts, Dialog, Prediction
 
 EXTRACTION_TEMPERATURE = 0.1
+PROMPT_PATH = Path("data/config/prompt.txt")
 
 
-SYSTEM_PROMPT = """Ты — система извлечения фактов из стенограмм B2B-продаж IT-оборудования.
+DEFAULT_SYSTEM_PROMPT = """Ты — система извлечения фактов из стенограмм B2B-продаж IT-оборудования.
 
 Тебе на вход дают транскрипт телефонного звонка между менеджером IT-интегратора и клиентом. Ты извлекаешь 6 структурированных полей сделки:
 
@@ -57,7 +59,23 @@ def _parse_payload(raw: str) -> dict[str, Any]:
     return json.loads(text)
 
 
-def _build_messages(transcript: str, repair_error: str | None = None) -> list[dict[str, str]]:
+def load_system_prompt(path: Path = PROMPT_PATH) -> str:
+    """Read system prompt from file; fall back to DEFAULT_SYSTEM_PROMPT."""
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    return DEFAULT_SYSTEM_PROMPT
+
+
+def save_system_prompt(text: str, path: Path = PROMPT_PATH) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def _build_messages(
+    transcript: str,
+    system_prompt: str,
+    repair_error: str | None = None,
+) -> list[dict[str, str]]:
     user = f"Извлеки факты из транскрипта:\n\n{transcript}"
     if repair_error:
         user += (
@@ -65,15 +83,23 @@ def _build_messages(transcript: str, repair_error: str | None = None) -> list[di
             "Верни тот же JSON, но исправь структуру."
         )
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user},
     ]
 
 
-def extract_one(client: LLMClient, sample_id: str, transcript: str) -> Prediction:
+def extract_one(
+    client: LLMClient,
+    sample_id: str,
+    transcript: str,
+    *,
+    system_prompt: str | None = None,
+) -> Prediction:
     """Extract DealFacts from one transcript. One repair attempt on schema fail."""
+    prompt = system_prompt if system_prompt is not None else load_system_prompt()
+
     raw = client.chat(
-        messages=_build_messages(transcript),
+        messages=_build_messages(transcript, prompt),
         temperature=EXTRACTION_TEMPERATURE,
         response_format={"type": "json_object"},
     )
@@ -82,9 +108,8 @@ def extract_one(client: LLMClient, sample_id: str, transcript: str) -> Predictio
         payload = _parse_payload(raw)
         facts = DealFacts.model_validate(payload)
     except (json.JSONDecodeError, ValidationError) as exc:
-        # One repair pass
         raw = client.chat(
-            messages=_build_messages(transcript, repair_error=str(exc)),
+            messages=_build_messages(transcript, prompt, repair_error=str(exc)),
             temperature=EXTRACTION_TEMPERATURE,
             response_format={"type": "json_object"},
         )
@@ -93,13 +118,20 @@ def extract_one(client: LLMClient, sample_id: str, transcript: str) -> Predictio
             payload = _parse_payload(raw)
             facts = DealFacts.model_validate(payload)
         except (json.JSONDecodeError, ValidationError):
-            # Give up: return empty facts with the raw response saved.
             return Prediction(
                 id=sample_id, prediction=DealFacts(), raw_response=raw, parse_repaired=True
             )
     return Prediction(id=sample_id, prediction=facts, raw_response=raw, parse_repaired=repaired)
 
 
-def extract_batch(client: LLMClient, samples: list[SyntheticSample]) -> list[Prediction]:
+def extract_batch(
+    client: LLMClient,
+    dialogs: list[Dialog],
+    *,
+    system_prompt: str | None = None,
+) -> list[Prediction]:
     """Run extract_one over a batch in order."""
-    return [extract_one(client, s.id, s.transcript) for s in samples]
+    return [
+        extract_one(client, d.id, d.transcript, system_prompt=system_prompt)
+        for d in dialogs
+    ]

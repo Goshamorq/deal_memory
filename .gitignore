@@ -8,8 +8,8 @@ build/
 .pytest_cache/
 .ruff_cache/
 
-data/synthetic/
 data/eval-runs/
+data/annotations/
 
 .claude/settings.json
 .claude/settings.local.json
