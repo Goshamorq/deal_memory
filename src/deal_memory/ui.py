@@ -115,27 +115,52 @@ div[data-testid="stHorizontalBlock"]:has(.dm-verdict-correct):has(> div[data-tes
 
 # ---- Speaker-aware transcript renderer ----
 
+# Recognise only THESE prefixes as turn boundaries. Anything else (e.g.
+# «Тема:», «С уважением,», «Гарантия: 12 мес») stays as part of the
+# previous turn's body — important for email-style transcripts where
+# colons appear inside the message.
+KNOWN_SPEAKERS: tuple[str, ...] = (
+    "Менеджер",
+    "Клиент",
+    "Технический директор клиента",
+    "Новый менеджер",
+    "ФД клиента",
+    "Финансовый директор",
+)
 _SPEAKER_RE = re.compile(
-    r"(Менеджер|Клиент|Технический директор клиента|Новый менеджер|ФД клиента|Финансовый директор)\s*:",
+    r"(" + "|".join(re.escape(s) for s in KNOWN_SPEAKERS) + r")\s*:",
     re.IGNORECASE,
 )
 
 
+def _match_speaker_prefix(line: str) -> str | None:
+    low = line.lower()
+    for sp in KNOWN_SPEAKERS:
+        if low.startswith(sp.lower() + ":") or low.startswith(sp.lower() + " :"):
+            return sp
+    return None
+
+
 def split_transcript_turns(transcript: str) -> list[tuple[str, str]]:
-    """Return [(speaker, text), ...] regardless of whether the source uses
-    newlines or single-paragraph inline-speakers formatting."""
+    """Return [(speaker, text), ...]. Only recognised speaker prefixes
+    start a new turn; everything else is continuation."""
     turns: list[tuple[str, str]] = []
     for line in transcript.splitlines():
-        line = line.strip()
-        if not line:
+        if not line.strip():
+            # Preserve blank line as paragraph break in continuations.
+            if turns:
+                turns[-1] = (turns[-1][0], turns[-1][1] + "\n\n")
             continue
-        if ":" in line:
-            sp, _, rest = line.partition(":")
-            turns.append((sp.strip(), rest.strip()))
+        sp = _match_speaker_prefix(line.strip())
+        if sp is not None:
+            rest = line.strip()[len(sp) :].lstrip(": ").strip()
+            turns.append((sp, rest))
         elif turns:
-            turns[-1] = (turns[-1][0], turns[-1][1] + " " + line)
+            turns[-1] = (turns[-1][0], turns[-1][1].rstrip() + "\n" + line.strip())
         else:
-            turns.append(("?", line))
+            turns.append(("?", line.strip()))
+
+    # Inline-speakers fallback (single-paragraph transcripts).
     if len(turns) <= 1 and _SPEAKER_RE.search(transcript):
         parts = _SPEAKER_RE.split(transcript)
         turns = []
