@@ -74,6 +74,11 @@ div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
 :not(:has(> div[data-testid="stColumn"]:nth-child(5)))
 > div[data-testid="stColumn"]:nth-child(2) button[kind="secondary"] {
+    background: #ffffff !important; color: #555 !important; border-color: #d0d0d0 !important;
+}
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
+:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
+> div[data-testid="stColumn"]:nth-child(2) button[kind="secondary"]:hover {
     background: #fce4e4 !important; color: #b03a3a !important; border-color: #b03a3a !important;
 }
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
@@ -86,6 +91,11 @@ div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
 :not(:has(> div[data-testid="stColumn"]:nth-child(5)))
 > div[data-testid="stColumn"]:nth-child(3) button[kind="secondary"] {
+    background: #ffffff !important; color: #555 !important; border-color: #d0d0d0 !important;
+}
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
+:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
+> div[data-testid="stColumn"]:nth-child(3) button[kind="secondary"]:hover {
     background: #fcefd0 !important; color: #8a6a14 !important; border-color: #c89c1f !important;
 }
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
@@ -98,6 +108,11 @@ div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
 :not(:has(> div[data-testid="stColumn"]:nth-child(5)))
 > div[data-testid="stColumn"]:nth-child(4) button[kind="secondary"] {
+    background: #ffffff !important; color: #555 !important; border-color: #d0d0d0 !important;
+}
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
+:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
+> div[data-testid="stColumn"]:nth-child(4) button[kind="secondary"]:hover {
     background: #dff0d8 !important; color: #2e6b2e !important; border-color: #3a8a3a !important;
 }
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
@@ -387,20 +402,7 @@ def tab_metrics() -> None:
         ]
     )
 
-    def _color_verdict_columns(col: pd.Series) -> list[str]:
-        if col.name == "✗":
-            return ["background-color: #fce4e4; color: #b03a3a; font-weight: 600"] * len(col)
-        if col.name == "±":
-            return ["background-color: #fcefd0; color: #8a6a14; font-weight: 600"] * len(col)
-        if col.name == "✓":
-            return ["background-color: #dff0d8; color: #2e6b2e; font-weight: 600"] * len(col)
-        return [""] * len(col)
-
-    styled = (
-        df.style
-        .apply(_color_verdict_columns, axis=0)
-        .format({"accuracy": "{:.0%}", "soft": "{:.0%}", "таргет": "{:.0%}"})
-    )
+    styled = df.style.format({"accuracy": "{:.0%}", "soft": "{:.0%}", "таргет": "{:.0%}"})
     st.dataframe(styled, hide_index=True, use_container_width=True)
 
     st.subheader("Распределение по полям")
@@ -411,7 +413,8 @@ def tab_metrics() -> None:
         },
         index=["✗", "±", "✓"],
     ).T
-    st.bar_chart(chart_df, color=["#b03a3a", "#c89c1f", "#3a8a3a"])
+    # Lighter shades of the button colors so chart stays readable but soft.
+    st.bar_chart(chart_df, color=["#e08585", "#e0c060", "#85c685"])
 
 
 # ---- Tab 3: Настройки ----
