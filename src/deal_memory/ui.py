@@ -47,77 +47,61 @@ LIST_FIELDS = {"objections", "promises"}
 VERDICT_LABEL = {"correct": "✓", "partial": "±", "wrong": "✗", None: "·"}
 VERDICT_COLOR = {"correct": "#3a8a3a", "partial": "#c89c1f", "wrong": "#b03a3a"}
 
-# Annotation row is laid out as a 4-column block: [title, ✗, ±, ✓].
-# CSS below colors buttons by their column position (2/3/4) within any
-# 4-col block whose 4th column contains a button — that signature is
-# unique to our annotation rows.
+# Annotation row layout: [title, ✗, ±, ✓] in 4 columns.
+# Streamlit's `type="primary"` does NOT add an HTML attribute (the `kind`
+# prop is emotion-styled and stays React-only), so we instead emit a
+# hidden marker <div class="dm-verdict-X"> BEFORE the columns block. CSS
+# uses :has(marker) + adjacent-sibling to color the matching column's
+# button. Modern :has() works in Chrome 105+/Safari 15.4+/Firefox 121+.
 ANNOTATION_CSS = """
 <style>
-/* Annotation rows: 4 columns where every non-first column holds one button */
+.dm-verdict { display: none; }
+
+/* Compact + neutral baseline for annotation buttons. Scoped to 4-col blocks
+   where the 4th column exists and the 5th doesn't — unique to our row. */
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
 :not(:has(> div[data-testid="stColumn"]:nth-child(5)))
-> div[data-testid="stColumn"]:nth-child(2) button,
-div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
-:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
-> div[data-testid="stColumn"]:nth-child(3) button,
-div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
-:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
-> div[data-testid="stColumn"]:nth-child(4) button {
+> div[data-testid="stColumn"]:nth-child(n+2) button {
     padding: 0.15rem 0.4rem !important;
     min-height: 0 !important;
     line-height: 1 !important;
     font-size: 14px !important;
     border-width: 1px !important;
+    background: #ffffff !important;
+    color: #555 !important;
+    border-color: #d0d0d0 !important;
 }
 
-/* col 2 = ✗ wrong = red */
+/* Hover tints by column position (2=red ✗, 3=yellow ±, 4=green ✓) */
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
 :not(:has(> div[data-testid="stColumn"]:nth-child(5)))
-> div[data-testid="stColumn"]:nth-child(2) button[kind="secondary"] {
-    background: #ffffff !important; color: #555 !important; border-color: #d0d0d0 !important;
-}
-div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
-:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
-> div[data-testid="stColumn"]:nth-child(2) button[kind="secondary"]:hover {
+> div[data-testid="stColumn"]:nth-child(2) button:hover {
     background: #fce4e4 !important; color: #b03a3a !important; border-color: #b03a3a !important;
 }
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
 :not(:has(> div[data-testid="stColumn"]:nth-child(5)))
-> div[data-testid="stColumn"]:nth-child(2) button[kind="primary"] {
-    background: #b03a3a !important; color: #ffffff !important; border-color: #b03a3a !important;
-}
-
-/* col 3 = ± partial = yellow */
-div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
-:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
-> div[data-testid="stColumn"]:nth-child(3) button[kind="secondary"] {
-    background: #ffffff !important; color: #555 !important; border-color: #d0d0d0 !important;
-}
-div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
-:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
-> div[data-testid="stColumn"]:nth-child(3) button[kind="secondary"]:hover {
+> div[data-testid="stColumn"]:nth-child(3) button:hover {
     background: #fcefd0 !important; color: #8a6a14 !important; border-color: #c89c1f !important;
 }
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
 :not(:has(> div[data-testid="stColumn"]:nth-child(5)))
-> div[data-testid="stColumn"]:nth-child(3) button[kind="primary"] {
-    background: #c89c1f !important; color: #ffffff !important; border-color: #c89c1f !important;
-}
-
-/* col 4 = ✓ correct = green */
-div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
-:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
-> div[data-testid="stColumn"]:nth-child(4) button[kind="secondary"] {
-    background: #ffffff !important; color: #555 !important; border-color: #d0d0d0 !important;
-}
-div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
-:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
-> div[data-testid="stColumn"]:nth-child(4) button[kind="secondary"]:hover {
+> div[data-testid="stColumn"]:nth-child(4) button:hover {
     background: #dff0d8 !important; color: #2e6b2e !important; border-color: #3a8a3a !important;
 }
-div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]:nth-child(4))
-:not(:has(> div[data-testid="stColumn"]:nth-child(5)))
-> div[data-testid="stColumn"]:nth-child(4) button[kind="primary"] {
+
+/* Active verdict: marker <div class="dm-verdict-wrong|partial|correct"> is
+   rendered as a sibling element-container immediately BEFORE the columns
+   block. CSS then targets the next sibling's matching column button. */
+div[data-testid="stElementContainer"]:has(.dm-verdict-wrong) + div[data-testid="stElementContainer"]
+  div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(2) button {
+    background: #b03a3a !important; color: #ffffff !important; border-color: #b03a3a !important;
+}
+div[data-testid="stElementContainer"]:has(.dm-verdict-partial) + div[data-testid="stElementContainer"]
+  div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(3) button {
+    background: #c89c1f !important; color: #ffffff !important; border-color: #c89c1f !important;
+}
+div[data-testid="stElementContainer"]:has(.dm-verdict-correct) + div[data-testid="stElementContainer"]
+  div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(4) button {
     background: #3a8a3a !important; color: #ffffff !important; border-color: #3a8a3a !important;
 }
 </style>
@@ -227,8 +211,16 @@ def _render_field(
     label = FIELD_LABELS[field]
 
     with st.container(border=True):
-        # Header row: 4 cols — [title, ✗, ±, ✓]. The annotation buttons are
-        # styled by ANNOTATION_CSS (red/yellow/green) based on column index.
+        # Marker for CSS sibling-targeting: tells the very-next-sibling
+        # element-container (the columns block) which annotation column
+        # should render as "active" (filled with its colour).
+        if current_verdict:
+            st.markdown(
+                f'<div class="dm-verdict dm-verdict-{current_verdict}"></div>',
+                unsafe_allow_html=True,
+            )
+
+        # Header row: 4 cols — [title, ✗, ±, ✓].
         title_col, c_wrong, c_partial, c_correct = st.columns([6, 1, 1, 1])
         with title_col:
             st.markdown(f"**{label}**")
@@ -236,7 +228,6 @@ def _render_field(
             if st.button(
                 "✗",
                 key=f"v-wrong-{dialog_id}-{field}",
-                type="primary" if current_verdict == "wrong" else "secondary",
                 help="Неверно",
                 use_container_width=True,
                 disabled=prediction is None,
@@ -247,7 +238,6 @@ def _render_field(
             if st.button(
                 "±",
                 key=f"v-partial-{dialog_id}-{field}",
-                type="primary" if current_verdict == "partial" else "secondary",
                 help="Частично",
                 use_container_width=True,
                 disabled=prediction is None,
@@ -258,7 +248,6 @@ def _render_field(
             if st.button(
                 "✓",
                 key=f"v-correct-{dialog_id}-{field}",
-                type="primary" if current_verdict == "correct" else "secondary",
                 help="Верно",
                 use_container_width=True,
                 disabled=prediction is None,
