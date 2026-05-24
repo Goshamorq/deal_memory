@@ -215,7 +215,8 @@ def tab_dialogs() -> None:
 
     col_pool, col_dialog = st.columns(2)
     with col_pool:
-        pool = st.selectbox("Пул диалогов", pools, key="pool_select")
+        pool_idx = pools.index(st.session_state["pool_select"]) if st.session_state.get("pool_select") in pools else 0
+        pool = st.selectbox("Пул диалогов", pools, index=pool_idx, key="pool_select")
     dialogs = _load_dialogs(pool)
     predictions = _load_predictions(pool)
     annotations = _load_annotations(pool)
@@ -229,7 +230,17 @@ def tab_dialogs() -> None:
             scn = f"  ({d.scenario})" if d.scenario else ""
             return f"{mark}  {did}{scn}"
 
-        dialog_id = st.selectbox("Диалог", dialog_options, format_func=fmt, key="dialog_select")
+        # Persist selection across st.rerun() — relying on key= alone proved
+        # flaky when buttons inside the right column trigger a rerun.
+        saved_did = st.session_state.get("dialog_select")
+        dialog_idx = dialog_options.index(saved_did) if saved_did in dialog_options else 0
+        dialog_id = st.selectbox(
+            "Диалог",
+            dialog_options,
+            index=dialog_idx,
+            format_func=fmt,
+            key="dialog_select",
+        )
     if dialog_id is None:
         return
     dialog = next(d for d in dialogs if d.id == dialog_id)
